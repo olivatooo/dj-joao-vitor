@@ -4,9 +4,20 @@ YouTube music bot for [Spacebar](https://docs.spacebar.chat/) instances.
 
 ## Why this isn't just a discord.py bot
 
-Spacebar is Discord-API-compatible for REST and the main gateway, so discord.py
-drives commands fine once `discord.http.Route.BASE` points at the instance.
-Voice is the exception. Spacebar's voice gateway hard-rejects Discord's UDP
+Spacebar is close enough to Discord's API that discord.py drives commands, but
+`discord.http.Route.BASE` alone is *not* enough — it only redirects REST. Three
+shims in `bot.py` are load-bearing, all three verified against a live instance:
+
+- **`DiscordWebSocket.DEFAULT_GATEWAY`** must be overridden too. It's a
+  hardcoded constant, so a bot with only `Route.BASE` set connects to the real
+  `gateway.discord.gg` and sends your instance token to Discord, which bounces
+  it as a confusing `4004 Authentication failed`.
+- **`compress=False`** on the gateway. Spacebar doesn't implement
+  `zlib-stream`; discord.py requests it by default and the socket dies.
+- **Voice channel defaults.** Spacebar omits `bitrate` and `user_limit` and
+  sends `video_quality_mode: null`; discord.py indexes all three.
+
+Voice is a bigger exception. Spacebar's voice gateway hard-rejects Discord's UDP
 voice path:
 
 ```ts
