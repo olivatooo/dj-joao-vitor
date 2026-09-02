@@ -1,0 +1,3 @@
+aiortc
+discord.py
+yt-dlp

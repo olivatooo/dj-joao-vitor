@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.git/
+*.md
+k8s.yaml
+test_sdp.py

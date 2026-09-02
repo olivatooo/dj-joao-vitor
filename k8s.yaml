@@ -1,0 +1,57 @@
+# The token secret is deliberately not in this file -- create it out of band so
+# there is no REPLACE_ME here for someone to fill in and commit:
+#
+#   kubectl create secret generic dj-joao-vitor --from-literal=token='<bot token>'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dj-joao-vitor
+spec:
+  # One bot, and never two at once: a rolling update would briefly run a second
+  # replica that also answers !play. Recreate accepts a few seconds of downtime
+  # instead.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: dj-joao-vitor
+  template:
+    metadata:
+      labels:
+        app: dj-joao-vitor
+    spec:
+      containers:
+        - name: bot
+          image: dj-joao-vitor:latest
+          env:
+            - name: SPACEBAR_API
+              value: https://chat.plan-b4.com/api
+            # Overrides whatever regions_available_0_endpoint says in the db.
+            - name: SPACEBAR_VOICE
+              value: wss://voice.plan-b4.com
+            - name: SPACEBAR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: dj-joao-vitor
+                  key: token
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
