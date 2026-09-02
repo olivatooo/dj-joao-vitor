@@ -24,6 +24,7 @@ spec:
     spec:
       containers:
         - name: bot
+          # Swap for <dockerhub-user>/dj-joao-vitor:latest once CI has pushed.
           image: dj-joao-vitor:latest
           env:
             - name: SPACEBAR_API

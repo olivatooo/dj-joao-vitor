@@ -127,6 +127,12 @@ kubectl create secret generic dj-joao-vitor --from-literal=token='<bot token>'
 kubectl apply -f k8s.yaml
 ```
 
+`.github/workflows/docker.yml` builds and pushes to Docker Hub on every push to
+`main` (tags `latest` and the commit sha). It needs two repo secrets:
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (an access token, not your password)
+— until those exist the workflow will fail on the login step. Then point
+`k8s.yaml`'s `image:` at `<user>/dj-joao-vitor:latest`.
+
 Nothing is exposed, and that is not an omission — the bot never listens. The
 gateway and voice WebSockets are outbound, and the media flow is outbound too
 because the SFU is ice-lite: it only ever replies to the source address of our
