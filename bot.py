@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import sys
+import traceback
 
 import discord
 import yarl
@@ -51,6 +52,21 @@ def _lenient_vocal_update(self, guild, data):
 
 
 discord.channel.VocalGuildChannel._update = _lenient_vocal_update
+
+# Spacebar keeps VoiceState rows after a user leaves and ships them in
+# GUILD_CREATE with channel_id: null; discord.py does int(channel_id) on every
+# one of them and dies before on_ready.
+_guild_from_data = discord.Guild._from_data
+
+
+def _lenient_guild_from_data(self, guild):
+    states = guild.get("voice_states")
+    if states:
+        guild["voice_states"] = [s for s in states if s.get("channel_id") is not None]
+    return _guild_from_data(self, guild)
+
+
+discord.Guild._from_data = _lenient_guild_from_data
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 players: dict[int, "Player"] = {}
@@ -129,7 +145,11 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx, error):
-    await ctx.send(f"\N{CROSS MARK} {error}")
+    error = getattr(error, "original", error)
+    logging.error("command %s failed", ctx.command, exc_info=error)
+    tb = "".join(traceback.format_exception(error))
+    head = f"\N{CROSS MARK} `{type(error).__name__}: {error}`"
+    await ctx.send(f"{head}\n```\n{tb[-1600:]}\n```")
 
 
 if __name__ == "__main__":

@@ -172,6 +172,7 @@ class SpacebarVoiceClient(discord.VoiceProtocol):
         self._ws = None
         self._task = None
         self._connected = asyncio.Event()
+        self._error = None
 
     # -- discord.py plumbing ------------------------------------------------
 
@@ -190,7 +191,15 @@ class SpacebarVoiceClient(discord.VoiceProtocol):
         await self.channel.guild.change_voice_state(
             channel=self.channel, self_deaf=self_deaf, self_mute=self_mute
         )
-        await asyncio.wait_for(self._connected.wait(), timeout)
+        try:
+            await asyncio.wait_for(self._connected.wait(), timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"voice connect timed out after {timeout}s: "
+                f"endpoint={self.endpoint!r} ssrc={self.ssrc} "
+                f"webrtc={self.pc.connectionState if self.pc else 'no offer sent'}"
+                + (f"; voice gateway raised {self._error!r}" if self._error else "")
+            ) from None
 
     async def disconnect(self, *, force=False):
         if self._task:
@@ -252,6 +261,10 @@ class SpacebarVoiceClient(discord.VoiceProtocol):
                             await self._answer(d["sdp"])
                         else:
                             log.debug("voice op %s: %s", op, d)
+                except Exception as e:
+                    self._error = e
+                    log.exception("voice gateway failed")
+                    raise
                 finally:
                     if hb:
                         hb.cancel()
@@ -305,3 +318,22 @@ class SpacebarVoiceClient(discord.VoiceProtocol):
         )
         self._connected.set()
         log.info("voice connected, ssrc=%s", self.ssrc)
+        asyncio.create_task(self._rtp_stats())
+
+    async def _rtp_stats(self):
+        """Periodic proof of whether RTP is actually leaving the box."""
+        while self.pc and self.pc.connectionState == "connected":
+            await asyncio.sleep(5)
+            out, remote = [], []
+            for st in (await self.pc.getStats()).values():
+                if st.type == "outbound-rtp":
+                    out.append(f"ssrc={st.ssrc} pkts={st.packetsSent} bytes={st.bytesSent}")
+                elif st.type == "remote-inbound-rtp":
+                    remote.append(f"lost={st.packetsLost} jitter={st.jitter} rtt={st.roundTripTime}")
+            log.info(
+                "RTP out[%s] remote[%s] dir=%s announced_ssrc=%s playing=%s pts=%s",
+                "; ".join(out) or "NONE",
+                "; ".join(remote) or "no receiver reports",
+                [t.currentDirection for t in self.pc.getTransceivers()],
+                self.ssrc, self.track.playing, self.track._pts,
+            )

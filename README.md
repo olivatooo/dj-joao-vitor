@@ -16,6 +16,10 @@ shims in `bot.py` are load-bearing, all three verified against a live instance:
   `zlib-stream`; discord.py requests it by default and the socket dies.
 - **Voice channel defaults.** Spacebar omits `bitrate` and `user_limit` and
   sends `video_quality_mode: null`; discord.py indexes all three.
+- **Stale voice states.** Spacebar keeps `VoiceState` rows after a user leaves
+  and ships them in `GUILD_CREATE` with `channel_id: null`; discord.py calls
+  `int()` on each and dies before `on_ready`. One crashed voice session
+  otherwise bricks every subsequent startup.
 
 Voice is a bigger exception. Spacebar's voice gateway hard-rejects Discord's UDP
 voice path:
